@@ -100,7 +100,7 @@
   <div class="hide-when-cal">
     <h2 data-t="scene"></h2>
     <div class="scenes" id="scenes"></div>
-    <p class="hint" data-t="sceneHint"></p>
+    <p class="hint" id="sceneHint" data-t="sceneHint"></p>
 
     <h2 data-t="age"></h2>
     <div class="age"><input type="range" id="ageMonths" min="0" max="24" step="1"><span id="ageVal"></span></div>
@@ -139,11 +139,20 @@
       <div id="meter"><div id="meterFill"></div><div id="meterMark"></div></div>
       <p class="hint" data-t="slapHint"></p>
 
+      <h2 data-t="bodyTitle"></h2>
+      <label><span data-t="bodyOn"></span> <input type="checkbox" id="body"></label>
+      <label><span data-t="bodySens"></span> <input type="range" id="bodySens" min="0" max="1" step="0.05"></label>
+      <button id="learnBtn" class="secondary" data-t="bodyLearn"></button>
+      <p class="hint" data-t="bodyHint"></p>
+
       <h2 data-t="look"></h2>
       <label><span data-t="glow"></span> <input type="range" id="bgGlow" min="0" max="1" step="0.05"></label>
       <label><span data-t="handGlow"></span> <input type="checkbox" id="handGlow"></label>
       <label><span data-t="gpu"></span> <input type="checkbox" id="gpuWater"></label>
       <label><span data-t="showDots"></span> <input type="checkbox" id="showDots"></label>
+
+      <button id="resetBtn" class="secondary" style="margin-top:18px" data-t="reset"></button>
+      <p class="hint" data-t="resetHint"></p>
 
       <p class="hint" style="margin-top:14px" data-t="keys"></p>
     </details>
@@ -158,7 +167,7 @@
 // ---------- Settings ----------
 const DEFAULTS = {
   fishCount: 9, fishSize: 1, reach: 0.45, speed: 1, slapThresh: 9,
-  bgGlow: 0.55, handGlow: true, showDots: false, volume: 0.5, mirror: true,
+  bgGlow: 0.55, handGlow: true, showDots: false, body: false, bodySens: 0.5, volume: 0.5, mirror: true,
   calib: null, // { cam: [[x,y]x4 normalized], proj: [[x,y]x4 normalized] }
   cameraId: '',
   ageMonths: 10, birthday: '', gpuWater: true, scene: 'pond', autoScene: 0,
@@ -179,19 +188,19 @@ const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const I18N = {
   en: {
-    start: '1 · ▶ Start camera', restart: '1 · ↻ Restart camera', scene: 'Scene', age: "Baby's age", sound: 'Sound',
+    start: '1 · ▶ Start camera', restart: '1 · ↻ Restart camera', scene: 'Scene', age: "Child's age", sound: 'Sound',
     sceneHint: 'Hand still for a moment → food appears. Slap → they swim away.',
     months: n => plural(n, 'month', 'months'),
     lineUp: '2 · 🎯 Line up camera & projector', cancel: 'Cancel',
-    go: '3 · ⛶ Full screen', goHint: 'Hides this panel. Move the mouse and click ⚙︎ to bring it back.',
+    go: '3 · ⛶ Full screen', goHint: 'Hides this panel. To bring it back: press F or Esc, or move the mouse and click ⚙︎.',
     advanced: 'Advanced settings', camera: 'Camera', whichCamera: 'Which camera', defaultCam: 'Default',
     mirror: 'Mirror (when not lined up)', clearCal: 'Forget line-up',
-    animals: 'Animals', howMany: 'How many', size: 'Size', reach: 'How far they come', speed: 'Speed',
+    animals: 'Animals & bubbles', howMany: 'How many', size: 'Size', reach: 'How far they come', speed: 'Speed',
     autoScene: 'Change scene', never: 'Never', everyMin: n => `Every ${n} min`, birthday: 'Birthday (age updates itself)',
     slap: 'Slap detection', slapThresh: 'Slap strength needed',
-    slapHint: 'Green bar = hand movement now. A slap fires when it crosses the red line. Raise it if the animals run away when baby is only reaching.',
+    slapHint: 'Green bar = hand movement now. A slap fires when it crosses the red line. Raise it if things run away (or pop) when the child is only reaching.',
     look: 'Look', glow: 'Background light', handGlow: 'Light under hand', gpu: 'Realistic effects (GPU)', showDots: 'Show hand dots',
-    keys: '<kbd>H</kbd> hide panel · <kbd>F</kbd> full screen · <kbd>N</kbd> next scene · <kbd>C</kbd> line up · <kbd>Esc</kbd> cancel',
+    keys: '<kbd>H</kbd> hide/show panel · <kbd>F</kbd> full screen without panel · <kbd>N</kbd> next scene · <kbd>C</kbd> line up · <kbd>Esc</kbd> cancel',
     idle: 'Try it with the mouse: move = hand, hold still = food, click = slap.',
     noScenes: 'No scenes found. Start the app with the local server (see README).',
     loading: 'Loading hand tracker…',
@@ -200,27 +209,33 @@ const I18N = {
     camFail: e => `The camera didn't start: ${e}`,
     calFirst: 'Start the camera first.',
     dots: ['1 (red)', '2 (yellow)', '3 (blue)', '4 (green)'],
-    calClick: d => `Coloured dots are on the floor now. In the camera picture, click the centre of dot ${d}.`,
-    calBad: "Those points didn't work. Try again.", calDone: 'Lined up ✓ Put your hand on the blanket to check.',
+    calClick: d => `Coloured dots are on the floor or wall now. In the camera picture, click the centre of dot ${d}.`,
+    calBad: "Those points didn't work. Try again.", calDone: 'Lined up ✓ Put your hand on the picture to check.',
     calCancel: 'Line-up cancelled.', calCleared: 'Line-up forgotten.',
-    calYes: '✓ Lined up: animals go to real hands.', calNo: 'Not lined up yet. Do this once after placing the camera and projector.',
+    calYes: '✓ Lined up: the scene follows real hands.', calNo: 'Not lined up yet. Do this once after placing the camera and projector.',
     gpuFail: 'This computer cannot do the realistic effects; using the simple ones.',
+    bodyTitle: 'Wall: body & shadow', bodyOn: 'Detect body & shadow', bodySens: 'Sensitivity', bodyLearn: '🧱 Learn the empty wall',
+    bodyHint: 'For walls. The camera learns the empty wall; anything in front of it (a child, their shadow) touches the scene, not just hands. Learn again if the light changes. "Show hand dots" shows what it sees.',
+    bodyAway: n => `Step away from the wall… ${n}`, bodyLearning: 'Learning the empty wall…', bodyLearned: 'Wall learned ✓ Now step in front of it.',
+    bodyCam: 'Start the camera first (step 1).',
+    reset: '↺ Reset settings', resetHint: 'Back to the starting values. Keeps the line-up, camera, scene, age and language.',
+    resetAsk: 'Reset all settings to their starting values?', resetDone: 'Settings reset ✓',
     stageNames: ['High contrast: black, white & red', 'Bold, simple colours', 'Full colour', 'Rainbow: lots of colours'],
   },
   es: {
-    start: '1 · ▶ Encender cámara', restart: '1 · ↻ Reiniciar cámara', scene: 'Escenario', age: 'Edad del bebé', sound: 'Sonido',
+    start: '1 · ▶ Encender cámara', restart: '1 · ↻ Reiniciar cámara', scene: 'Escenario', age: 'Edad del niño', sound: 'Sonido',
     sceneHint: 'Mano quieta un momento → aparece comida. Golpe → se van nadando.',
     months: n => plural(n, 'mes', 'meses'),
     lineUp: '2 · 🎯 Alinear cámara y proyector', cancel: 'Cancelar',
-    go: '3 · ⛶ Pantalla completa', goHint: 'Oculta este panel. Mueve el mouse y haz clic en ⚙︎ para volver.',
+    go: '3 · ⛶ Pantalla completa', goHint: 'Oculta este panel. Para volver: presiona F o Esc, o mueve el mouse y haz clic en ⚙︎.',
     advanced: 'Ajustes avanzados', camera: 'Cámara', whichCamera: 'Cuál cámara', defaultCam: 'Predeterminada',
     mirror: 'Espejo (si no está alineado)', clearCal: 'Olvidar alineación',
-    animals: 'Animales', howMany: 'Cuántos', size: 'Tamaño', reach: 'Qué tan lejos vienen', speed: 'Velocidad',
+    animals: 'Animales y burbujas', howMany: 'Cuántos', size: 'Tamaño', reach: 'Qué tan lejos vienen', speed: 'Velocidad',
     autoScene: 'Cambiar escenario', never: 'Nunca', everyMin: n => `Cada ${n} min`, birthday: 'Cumpleaños (la edad se actualiza sola)',
     slap: 'Detección de golpe', slapThresh: 'Fuerza de golpe necesaria',
-    slapHint: 'Barra verde = movimiento de la mano ahora. Cuenta como golpe al pasar la línea roja. Súbela si los animales huyen cuando el bebé solo estira la mano.',
+    slapHint: 'Barra verde = movimiento de la mano ahora. Cuenta como golpe al pasar la línea roja. Súbela si las cosas huyen (o revientan) cuando el niño solo estira la mano.',
     look: 'Apariencia', glow: 'Luz del fondo', handGlow: 'Luz bajo la mano', gpu: 'Efectos realistas (GPU)', showDots: 'Mostrar puntos de la mano',
-    keys: '<kbd>H</kbd> ocultar panel · <kbd>F</kbd> pantalla completa · <kbd>N</kbd> siguiente escenario · <kbd>C</kbd> alinear · <kbd>Esc</kbd> cancelar',
+    keys: '<kbd>H</kbd> ocultar/mostrar panel · <kbd>F</kbd> pantalla completa sin panel · <kbd>N</kbd> siguiente escenario · <kbd>C</kbd> alinear · <kbd>Esc</kbd> cancelar',
     idle: 'Prueba con el mouse: moverlo = mano, dejarlo quieto = comida, clic = golpe.',
     noScenes: 'No se encontraron escenarios. Abre la app con el servidor local (ver README).',
     loading: 'Cargando el detector de manos…',
@@ -229,11 +244,17 @@ const I18N = {
     camFail: e => `La cámara no encendió: ${e}`,
     calFirst: 'Primero enciende la cámara.',
     dots: ['1 (rojo)', '2 (amarillo)', '3 (azul)', '4 (verde)'],
-    calClick: d => `Ya hay puntos de colores en el piso. En la imagen de la cámara, haz clic en el centro del punto ${d}.`,
-    calBad: 'Esos puntos no funcionaron. Intenta otra vez.', calDone: 'Alineado ✓ Pon tu mano en la cobija para probar.',
+    calClick: d => `Ya hay puntos de colores en el piso o la pared. En la imagen de la cámara, haz clic en el centro del punto ${d}.`,
+    calBad: 'Esos puntos no funcionaron. Intenta otra vez.', calDone: 'Alineado ✓ Pon tu mano sobre la imagen para probar.',
     calCancel: 'Alineación cancelada.', calCleared: 'Alineación olvidada.',
-    calYes: '✓ Alineado: los animales van a las manos reales.', calNo: 'Aún no está alineado. Hazlo una vez después de colocar la cámara y el proyector.',
+    calYes: '✓ Alineado: la escena sigue a las manos reales.', calNo: 'Aún no está alineado. Hazlo una vez después de colocar la cámara y el proyector.',
     gpuFail: 'Esta computadora no puede con los efectos realistas; uso los sencillos.',
+    bodyTitle: 'Pared: cuerpo y sombra', bodyOn: 'Detectar cuerpo y sombra', bodySens: 'Sensibilidad', bodyLearn: '🧱 Aprender la pared vacía',
+    bodyHint: 'Para la pared. La cámara aprende cómo se ve la pared vacía; lo que se ponga enfrente (el niño, su sombra) toca la escena, no solo las manos. Vuelve a aprenderla si cambia la luz. "Mostrar puntos de la mano" enseña lo que ve.',
+    bodyAway: n => `Aléjense de la pared… ${n}`, bodyLearning: 'Aprendiendo la pared vacía…', bodyLearned: 'Pared aprendida ✓ Ahora párate enfrente.',
+    bodyCam: 'Primero enciende la cámara (paso 1).',
+    reset: '↺ Restablecer ajustes', resetHint: 'Vuelve a los valores iniciales. Conserva la alineación, la cámara, el escenario, la edad y el idioma.',
+    resetAsk: '¿Regresar todos los ajustes a sus valores iniciales?', resetDone: 'Ajustes restablecidos ✓',
     stageNames: ['Alto contraste: negro, blanco y rojo', 'Colores fuertes y sencillos', 'A todo color', 'Arcoíris: muchos colores'],
   },
 };
@@ -256,7 +277,7 @@ function applyLang() {
   if (calibrating) $('calBtn').textContent = t.cancel;
   for (const o of $('autoScene').options) o.textContent = o.value === '0' ? t.never : t.everyMin(+o.value);
   if ($('cameraSel').options[0]?.value === '') $('cameraSel').options[0].textContent = t.defaultCam;
-  buildSceneButtons(); updateAgeText(); rebuildHomography(); setStatus(lastStatus[0], lastStatus[1], ...lastStatus[2]);
+  buildSceneButtons(); updateAgeText(); updateSceneHint(); rebuildHomography(); setStatus(lastStatus[0], lastStatus[1], ...lastStatus[2]);
 }
 $('langBtn').addEventListener('click', () => { S.lang = S.lang === 'es' ? 'en' : 'es'; save(); applyLang(); });
 
@@ -628,7 +649,7 @@ const ripples = [];
 function splash(x, y) {
   if (!SCENE) return;
   if (SCENE.waves) ripples.push({ x, y, age: 0 });
-  spawnParticles(x, y, 26, 1);
+  spawnParticles(x, y, SCENE.splashParticles ?? 26, 1);
   const radius = S.reach * UNIT * 1.3;
   for (const f of critters) f.scare(x, y, radius);
   SCENE.onSplash?.(x, y, radius);
@@ -893,8 +914,8 @@ function wave(x, y, radius, strength) { if (useGpu && SCENE.waves) gpu.drop(x, y
 const api = {
   get W() { return W; }, get H() { return H; }, get UNIT() { return UNIT; }, get DPR() { return DPR; },
   get S() { return S; }, get LOOK() { return LOOK; }, get stage() { return stageIndex(); }, get scene() { return SCENE; },
-  ctx, rand, pick, Critter, foods, wave, spawnParticles, glowSprite, gradient, caustics,
-  sounds: { bloop, bell, PENTA },
+  get body() { return body; }, ctx, rand, pick, Critter, foods, wave, spawnParticles, glowSprite, gradient, caustics,
+  sounds: { bloop, bell, PENTA, audio },
 };
 const SCENES = new Map();
 let SCENE = null, LOOK = null;
@@ -930,6 +951,12 @@ function applyScene() {
   spawnCritters();
   SCENE.decor?.init?.();
   for (const b of document.querySelectorAll('#scenes button')) b.setAttribute('aria-pressed', String(b.dataset.id === SCENE.id));
+  updateSceneHint();
+}
+// A scene can bring its own one-line "how to play" ({ en, es }); otherwise the general one is shown
+function updateSceneHint() {
+  const h = SCENE?.hint?.[S.lang] || SCENE?.hint?.en;
+  if (h) $('sceneHint').textContent = h; else $('sceneHint').innerHTML = T().sceneHint;
 }
 function buildSceneButtons() {
   const box = $('scenes'); box.innerHTML = '';
@@ -970,6 +997,7 @@ let meterLevel = 0;
 function handsNow(now) {
   const list = tracks.filter(t => now - t.seen < 250);
   if (mouseHand && now - mouseHand.seen < 10000) list.push(mouseHand);   // a resting mouse counts as a resting hand
+  if (body.on) list.push(...body.hands.filter(b => now - b.seen < 300));
   return list;
 }
 function updateTracks(results, now) {
@@ -1014,6 +1042,149 @@ function updateTracks(results, now) {
   const e = Math.max(0, ...tracks.map(t => t.energy || 0));
   meterLevel = Math.max(e, meterLevel * 0.85);
 }
+
+// ---------- Body & shadow (for walls) ----------
+// No AI here: the camera learns what the empty wall looks like, and whatever changes it a lot (a child, their
+// shadow) is "body". It is kept as a coarse grid over the screen: scenes can ask body.hit(x, y, r) (bubbles pop
+// where it touches), and each blob also counts as a hand (at its highest part, where a reaching arm usually is),
+// so fish and butterflies come to it too. What we project changes the wall as well: a tiny copy of the picture
+// shows where it is changing, and those cells keep what they were until the picture there settles.
+const BW = 64; let BH = 36;
+const body = { on: false, mask: new Uint8Array(0), hands: [], hit: bodyHit, get gw() { return BW; }, get gh() { return BH; } };
+let bodyKey = '', bodyIdx = null, bodyCamPts = null, bodyBg = null, bodyLearn = 0, lastBodyTime = -1;
+let bodyRawPrev = null, bodyProjPrev = null, bodyHot = null;
+const camCv = document.createElement('canvas'), camCx = camCv.getContext('2d', { willReadFrequently: true });
+const projCv = document.createElement('canvas'), projCx = projCv.getContext('2d');   // GPU-side shrink of the picture
+function bodyLayout() {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const key = `${W}x${H}|${vw}x${vh}|${JSON.stringify(S.calib)}|${S.mirror}`;
+  if (key === bodyKey) return;
+  bodyKey = key;
+  BH = Math.max(16, Math.round(BW * H / Math.max(1, W)));
+  const n = BW * BH;
+  camCv.width = 192; camCv.height = Math.max(1, Math.round(192 * vh / Math.max(1, vw)));
+  projCv.width = BW; projCv.height = BH;
+  const inv = S.calib ? solveHomography(S.calib.proj, S.calib.cam) : null;   // screen -> camera
+  bodyIdx = new Int32Array(n); bodyCamPts = new Float32Array(n * 2);
+  for (let j = 0; j < BH; j++) for (let i = 0; i < BW; i++) {
+    const sx = (i + 0.5) / BW, sy = (j + 0.5) / BH, k = j * BW + i;
+    let cx, cy;
+    if (inv) { const d = inv[6] * sx + inv[7] * sy + inv[8]; cx = (inv[0] * sx + inv[1] * sy + inv[2]) / d; cy = (inv[3] * sx + inv[4] * sy + inv[5]) / d; }
+    else { cx = S.mirror ? 1 - sx : sx; cy = sy; }
+    bodyCamPts[k * 2] = cx; bodyCamPts[k * 2 + 1] = cy;
+    bodyIdx[k] = cx < 0 || cx > 1 || cy < 0 || cy > 1 ? -1
+      : (Math.round(cy * (camCv.height - 1)) * camCv.width + Math.round(cx * (camCv.width - 1))) * 4;
+  }
+  body.mask = new Uint8Array(n); bodyRawPrev = new Uint8Array(n); bodyHot = new Float32Array(n);
+  bodyProjPrev = null; bodyBg = null; bodyLearn = 12;   // a new layout needs the wall learned again
+}
+function bodyStep(now) {
+  if (!S.body || video.readyState < 2 || calibrating) { body.on = false; return; }
+  if (video.currentTime === lastBodyTime) return;
+  lastBodyTime = video.currentTime;
+  bodyLayout();
+  const n = BW * BH, mask = body.mask;
+  camCx.drawImage(video, 0, 0, camCv.width, camCv.height);
+  const px = camCx.getImageData(0, 0, camCv.width, camCv.height).data;
+  const lum = new Float32Array(n);
+  for (let k = 0; k < n; k++) { const i = bodyIdx[k]; lum[k] = i < 0 ? -1 : 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]; }
+  // where our own picture is changing
+  projCx.clearRect(0, 0, BW, BH); projCx.drawImage(stage, 0, 0, BW, BH);
+  const pp = projCx.getImageData(0, 0, BW, BH).data, proj = new Float32Array(n);
+  for (let k = 0; k < n; k++) { const i = k * 4; proj[k] = (0.299 * pp[i] + 0.587 * pp[i + 1] + 0.114 * pp[i + 2]) * pp[i + 3] / 255; }
+  for (let k = 0; k < n; k++) bodyHot[k] = Math.max(bodyHot[k] * 0.7, bodyProjPrev ? Math.abs(proj[k] - bodyProjPrev[k]) : 0);
+  bodyProjPrev = proj;
+  if (bodyLearn > 0 || !bodyBg) {
+    if (!bodyBg) bodyBg = lum.slice(); else for (let k = 0; k < n; k++) bodyBg[k] += (lum[k] - bodyBg[k]) * 0.3;
+    bodyLearn = Math.max(0, bodyLearn - 1);
+    mask.fill(0); body.on = false; return;
+  }
+  // the camera brightens and darkens the whole picture by itself: take that out first
+  const diffs = [];
+  for (let k = 0; k < n; k++) if (lum[k] >= 0) diffs.push(lum[k] - bodyBg[k]);
+  diffs.sort((a, b) => a - b);
+  const med = diffs.length ? diffs[diffs.length >> 1] : 0;
+  const thresh = 12 + (1 - S.bodySens) * 48;
+  const raw = new Uint8Array(n);
+  const HOT = 12;   // the picture changed this much here: hold the last answer
+  for (let k = 0; k < n; k++) {
+    if (lum[k] < 0) continue;
+    raw[k] = bodyHot[k] > HOT ? bodyRawPrev[k] : Math.abs(lum[k] - bodyBg[k] - med) > thresh ? 1 : 0;
+  }
+  // keep cells that were there last frame too and have company (drops flicker and specks)
+  for (let j = 0; j < BH; j++) for (let i = 0; i < BW; i++) {
+    const k = j * BW + i;
+    let nb = 0;
+    if (raw[k]) for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      const ii = i + di, jj = j + dj;
+      if ((di || dj) && ii >= 0 && ii < BW && jj >= 0 && jj < BH) nb += raw[jj * BW + ii];
+    }
+    mask[k] = raw[k] && bodyRawPrev[k] && nb >= 2 ? 1 : 0;
+  }
+  bodyRawPrev = raw;
+  // the empty wall follows slow light changes (a few seconds). Under a child it moves much slower, so standing
+  // still still counts, but something left in front of the wall fades away after half a minute or so
+  for (let k = 0; k < n; k++) if (lum[k] >= 0 && bodyHot[k] <= HOT && !raw[k]) bodyBg[k] += (lum[k] - bodyBg[k] - med) * 0.01;
+  for (let k = 0; k < n; k++) if (mask[k]) bodyBg[k] += (lum[k] - bodyBg[k] - med) * 0.0015;
+  bodyBlobs(now);
+  body.on = true;
+}
+// Each blob becomes a "hand" at its highest part
+function bodyBlobs(now) {
+  const mask = body.mask, seen = new Uint8Array(mask.length), found = [], cw = W / BW, ch = H / BH;
+  for (let s = 0; s < mask.length; s++) {
+    if (!mask[s] || seen[s]) continue;
+    const cells = [], stack = [s]; seen[s] = 1;
+    while (stack.length) {
+      const k = stack.pop(), i = k % BW, j = (k / BW) | 0; cells.push(k);
+      for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) {   // small gaps don't split a child in two
+        const ii = i + di, jj = j + dj, q = jj * BW + ii;
+        if (ii >= 0 && ii < BW && jj >= 0 && jj < BH && mask[q] && !seen[q]) { seen[q] = 1; stack.push(q); }
+      }
+    }
+    if (cells.length < 8) continue;
+    let top = Infinity, bot = 0;
+    for (const k of cells) { const j = (k / BW) | 0; top = Math.min(top, j); bot = Math.max(bot, j); }
+    const lim = top + Math.max(2, (bot - top) * 0.2);
+    let x = 0, y = 0, m = 0;
+    for (const k of cells) { const j = (k / BW) | 0; if (j <= lim) { x += (k % BW) + 0.5; y += j + 0.5; m++; } }
+    found.push({ x: x / m * cw, y: y / m * ch });
+  }
+  // follow the same blob from frame to frame (scenes keep things on each hand, like "held still for a while")
+  const used = new Set();
+  for (const f of found) {
+    let best = null, bd = UNIT * 0.2;
+    for (const h of body.hands) { if (used.has(h)) continue; const d = Math.hypot(h.x - f.x, h.y - f.y); if (d < bd) { bd = d; best = h; } }
+    if (!best) { best = { x: f.x, y: f.y, r: UNIT * 0.05, energy: 0, body: true }; body.hands.push(best); }
+    used.add(best);
+    best.x += (f.x - best.x) * 0.5; best.y += (f.y - best.y) * 0.5; best.seen = now;
+  }
+  body.hands = body.hands.filter(h => now - h.seen < 300);
+}
+// Is any body inside this circle? Returns the touching point (screen px), or null
+function bodyHit(x, y, r) {
+  if (!body.on) return null;
+  const cw = W / BW, ch = H / BH;
+  const i0 = Math.max(0, Math.floor((x - r) / cw)), i1 = Math.min(BW - 1, Math.floor((x + r) / cw));
+  const j0 = Math.max(0, Math.floor((y - r) / ch)), j1 = Math.min(BH - 1, Math.floor((y + r) / ch));
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+    if (!body.mask[j * BW + i]) continue;
+    const cx = (i + 0.5) * cw, cy = (j + 0.5) * ch;
+    if (Math.hypot(cx - x, cy - y) < r) return [cx, cy];
+  }
+  return null;
+}
+function learnWall() {
+  if (!video.srcObject) { setStatus('bodyCam', true); return; }
+  let n = 3;
+  const tick = () => {
+    if (n > 0) { setStatus('bodyAway', false, n--); setTimeout(tick, 1000); return; }
+    setStatus('bodyLearning'); bodyBg = null; bodyLearn = 15;
+    setTimeout(() => setStatus('bodyLearned'), 1200);
+  };
+  tick();
+}
+$('learnBtn').addEventListener('click', learnWall);
 
 // Mouse test: move = hand, hold still = food, click = slap
 let mouseTimer = 0;
@@ -1091,6 +1262,10 @@ function drawPreview(now) {
     pctx.fillStyle = t.energy > S.slapThresh ? '#ff5d5d' : '#7dffb0';
     for (const p of t.lm) { pctx.beginPath(); pctx.arc(p.x * pw, p.y * ph, 2.2, 0, Math.PI * 2); pctx.fill(); }
   }
+  if (body.on && bodyCamPts) {
+    pctx.fillStyle = 'rgba(255,90,90,0.7)';
+    for (let k = 0; k < body.mask.length; k++) if (body.mask[k]) pctx.fillRect(bodyCamPts[k * 2] * pw - 1.5, bodyCamPts[k * 2 + 1] * ph - 1.5, 3, 3);
+  }
   const pts = calibrating ? calClicks : (S.calib ? S.calib.cam : []);
   if (pts.length) {
     pctx.strokeStyle = '#ffcf5c'; pctx.lineWidth = 2; pctx.beginPath();
@@ -1122,6 +1297,7 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   detect(now);
+  bodyStep(now);
   useGpu = !!(S.gpuWater && gpu);
   if (gpu) gpu.canvas.style.display = useGpu && !calibrating ? 'block' : 'none';
   if (calibrating) { drawCalibrationTargets(); drawPreview(now); requestAnimationFrame(frame); return; }
@@ -1177,9 +1353,16 @@ function frame(now) {
     }
   }
   drawParticles(dt);
-  if (S.showDots) for (const h of hands) {
-    ctx.strokeStyle = '#ffcf5c'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2); ctx.stroke();
+  if (S.showDots) {
+    if (body.on) {
+      ctx.fillStyle = 'rgba(255,90,90,0.35)';
+      const cw = W / BW, ch = H / BH;
+      for (let k = 0; k < body.mask.length; k++) if (body.mask[k]) ctx.fillRect((k % BW) * cw, ((k / BW) | 0) * ch, cw, ch);
+    }
+    for (const h of hands) {
+      ctx.strokeStyle = '#ffcf5c'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2); ctx.stroke();
+    }
   }
   if (useGpu) gpu.render(t);
   drawPreview(now);
@@ -1187,34 +1370,58 @@ function frame(now) {
 }
 
 // ---------- Controls ----------
-for (const key of ['fishCount', 'fishSize', 'reach', 'speed', 'slapThresh', 'bgGlow', 'volume']) {
-  const el = $(key); el.value = S[key];
+const RANGES = ['fishCount', 'fishSize', 'reach', 'speed', 'slapThresh', 'bgGlow', 'volume', 'bodySens'];
+const CHECKS = ['handGlow', 'showDots', 'mirror', 'gpuWater', 'body'];
+function syncControls() {
+  for (const key of RANGES) $(key).value = S[key];
+  for (const key of CHECKS) $(key).checked = S[key];
+  $('ageMonths').value = S.ageMonths; $('birthday').value = S.birthday; $('autoScene').value = String(S.autoScene);
+}
+syncControls();
+for (const key of RANGES) {
+  const el = $(key);
   el.addEventListener('input', () => { S[key] = parseFloat(el.value); save(); if (key === 'fishCount' && SCENE) spawnCritters(); });
 }
-for (const key of ['handGlow', 'showDots', 'mirror', 'gpuWater']) {
-  const el = $(key); el.checked = S[key];
-  el.addEventListener('change', () => { S[key] = el.checked; save(); if (key === 'gpuWater' && el.checked) initGpu(); });
+for (const key of CHECKS) {
+  const el = $(key);
+  el.addEventListener('change', () => {
+    S[key] = el.checked; save();
+    if (key === 'gpuWater' && el.checked) initGpu();
+    if (key === 'body' && el.checked) learnWall();
+  });
 }
-$('ageMonths').value = S.ageMonths; $('birthday').value = S.birthday;
 $('ageMonths').addEventListener('input', e => { S.ageMonths = +e.target.value; save(); updateAgeText(); applyScene(); });
 $('birthday').addEventListener('change', e => { S.birthday = e.target.value; save(); updateAgeText(); applyScene(); });
-$('autoScene').value = String(S.autoScene);
 $('autoScene').addEventListener('change', e => { S.autoScene = +e.target.value; lastSwitch = performance.now(); save(); });
 
-$('goBtn').addEventListener('click', () => {
+// Reset the tuning, but keep what belongs to this room and this child
+$('resetBtn').addEventListener('click', () => {
+  if (!confirm(T().resetAsk)) return;
+  const keep = ['calib', 'cameraId', 'scene', 'ageMonths', 'birthday', 'lang'];
+  S = { ...DEFAULTS, ...Object.fromEntries(keep.map(k => [k, S[k]])) };
+  save(); syncControls(); rebuildHomography(); applyScene(); updateAgeText();
+  if (S.gpuWater) initGpu();
+  setStatus('resetDone');
+});
+
+// Full screen always goes with the panel hidden, and leaving it (F, Esc, ⚙︎) brings the panel back
+function enterShow() {
   document.body.classList.add('clean');
   document.documentElement.requestFullscreen?.().catch(() => {});
-});
-$('menuBtn').addEventListener('click', () => {
+}
+function leaveShow() {
   document.body.classList.remove('clean');
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-});
+}
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) document.body.classList.remove('clean'); });
+$('goBtn').addEventListener('click', enterShow);
+$('menuBtn').addEventListener('click', leaveShow);
 
 window.addEventListener('keydown', e => {
   if (['SELECT', 'INPUT'].includes(e.target.tagName) && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
   const k = e.key.toLowerCase(), ids = sceneIds();
   if (k === 'h') document.body.classList.toggle('clean');
-  else if (k === 'f') { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); }
+  else if (k === 'f') { if (document.fullscreenElement || document.body.classList.contains('clean')) leaveShow(); else enterShow(); }
   else if (k === 'c') calibrating ? (endCalibration(), setStatus('calCancel')) : startCalibration();
   else if (k === 'n' && SCENE) nextScene();
   else if (/^[1-9]$/.test(k) && ids[+k - 1]) switchScene(ids[+k - 1]);

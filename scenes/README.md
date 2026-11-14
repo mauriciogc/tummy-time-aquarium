@@ -7,6 +7,9 @@ Every `.js` file in this folder is a scene and shows up as a button in the panel
 | `pond.js` | Koi pond: water that bends the light, food pellets |
 | `reef.js` | Coral reef: sand, corals, anemones, tropical fish and sea turtles, fish flakes |
 | `garden.js` | Butterflies on a lawn: flowers bloom around a resting hand and butterflies land on them |
+| `bubbles.js` | Soap bubbles for a wall: they float up and pop on touch, a still hand blows a new one. Uses its own `update()` instead of the shared behaviour |
+| `balloons.js` | Surprise balloons for a wall: pop one and an animal comes down on a parachute and drifts away. Its own `update()` too |
+| `fireworks.js` | Fireworks and fireflies for a wall: each touch sends up a rocket that bursts there; fireflies use the shared behaviour |
 | `lib/fish.js` | Fish drawing shared by the pond and the reef |
 | `_example.js` | Template: ladybugs on a picnic blanket |
 
@@ -24,14 +27,17 @@ If a scene has an error, it is skipped and the error is shown in the browser con
 A scene file exports a function that receives `api` and returns the scene:
 
 - **`Critter`**: the animal class. Extend `api.Critter`, which already does the behaviour (wander, come to hands, circle and nibble, eat food, run from slaps). Write `draw(c, g)`, and optionally `shadow(c, g)` and `prepare()`. Whatever `prepare()` returns is passed to `shadow` and `draw` as `g`. Useful fields: `x`, `y`, `heading`, `L` (size in px), `phase` (animation clock), `swim` (0–1 speed), `scared`, `excite`, `perched`, `look` (its colours). Override `mouth()` if it eats from somewhere other than its centre. Set `sizeMul` / `speedMul` in the constructor for a bigger or slower animal.
+- **Your own movement** (optional): override `update(dt, hands, all)` and `scare(x, y, radius)` in the `Critter` to replace the shared behaviour entirely (see `bubbles.js`). `hands` are `{ x, y, r, speed }` in screen px.
+- **`api.body`**: when *Detect body & shadow* is on, `api.body.hit(x, y, r)` returns the point where a child or their shadow touches that circle (screen px), or `null`. `api.body.on` says whether it is running. Body blobs are also passed to scenes as hands.
+- **`hint`** (optional): `{ en, es }`, a one-line "how to play" shown in the panel instead of the general one.
 - **`spawn(n)`** (optional): make the animals yourself, for example `n` fish plus a turtle.
 - **`stages`**: four looks, one per age (0–3 months, 3–6, 6–12, 12+). Each has `bg` and `light` colours (`[r, g, b]`), `looks` (one is picked per animal), and anything else the scene wants. The current one is `api.LOOK`.
 - **`size`, `speed`, `wander`**: animal size (fraction of the screen), speed and how much it meanders.
 - **`waves`**: `true` for water. Hands and slaps then make waves, and `api.wave(x, y, radius, strength)` works. **`wake`**: how much the animals ripple the water.
 - **`shadow`**: `{ lift, alpha }`: how far below the animal the shadow falls, and how dark it is.
-- **`particle`**: what bursts out on a slap: `'bubble'`, `'petal'` or `'spark'`. **`particleColors()`** gives their colours.
+- **`particle`**: what bursts out on a slap: `'bubble'`, `'petal'` or `'spark'`. **`splashParticles`**: how many (26 if left out; use fewer for a calmer scene). **`particleColors()`** gives their colours.
 - **`motes`**: colour of floating specks, as `'r,g,b'`, or leave it out for none.
-- **`sound`**: `nibble()`, `splash()`, `eat()`, `perch()`. Use `api.sounds.bloop` (water) or `api.sounds.bell` (chimes) with `api.sounds.PENTA` notes.
+- **`sound`**: `nibble()`, `splash()`, `eat()`, `perch()`. Use `api.sounds.bloop` (water) or `api.sounds.bell` (chimes) with `api.sounds.PENTA` notes. `api.sounds.audio()` gives the Web Audio context for your own sounds (respect `api.S.volume`).
 - **`food`** (optional): what appears around a hand held still for a moment.
   - `spawn(hand)` returns new items `{ x, y, life, ... }`.
   - `draw(c, item, t, dt)` draws one item. `layer: 'under'` draws it below the animals, `'over'` above.
